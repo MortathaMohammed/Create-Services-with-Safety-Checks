@@ -145,6 +145,69 @@ Add the event hook in your app's `hooks.py` file to trigger the `create_services
 
 ---
 
+### **5. Adding `create_service_request_for_service` Method**
+
+The `create_service_request_for_service` method is used to create a Service Request for each service generated (Medication Request, Lab Test, Clinical Procedure). This method is essential to ensure that each generated service has an associated Service Request that tracks its status and related details.
+
+#### **Method Description**
+
+- **Method Name**: `create_service_request_for_service`
+- **Purpose**: Creates a Service Request document for a given service type and name, linking it to the corresponding **Inpatient Record**.
+
+#### **Method Code**
+
+```python
+def create_service_request_for_service(doc, service_doctype, service_name, service_type):
+    try:
+        # Determine the current date and time
+        from datetime import datetime
+        now = datetime.now()
+        order_date = now.date()
+        order_time = now.time().strftime("%H:%M:%S")
+
+        # Get the correct status Code Value document name
+        status_code_value = frappe.get_value("Code Value", {"code_value": "active"}, "name")
+        if not status_code_value:
+            frappe.throw(_("Could not find a valid status with code value 'active'."))
+
+        # Populate the Service Request document with mandatory fields
+        service_request = frappe.get_doc({
+            "doctype": "Service Request",
+            "naming_series": "HSR-",
+            "order_date": order_date,
+            "order_time": order_time,
+            "status": status_code_value,
+            "company": doc.company or frappe.defaults.get_user_default("Company"),
+            "patient": doc.patient,
+            "practitioner": doc.primary_practitioner,
+            "template_dt": service_doctype,
+            "template_dn": service_name
+        })
+
+        # Insert the Service Request
+        service_request.insert(ignore_permissions=True)
+        frappe.logger().info(
+            f"Service Request '{service_request.name}' created for {service_doctype} '{service_name}'"
+        )
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), _(f"Error creating Service Request"))
+        frappe.throw(_(f"An error occurred while creating the Service Request for {service_name}: {str(e)}"))
+```
+
+- **Parameters**:
+  - `doc`: The **Inpatient Record** document triggering the service creation.
+  - `service_doctype`: The type of service (e.g., `"Medication Request"`).
+  - `service_name`: The name of the service document.
+  - `service_type`: The category of service (e.g., `"Medication"`).
+
+- **Functionality**:
+  - The method populates the mandatory fields for the **Service Request**.
+  - It assigns the `status` from a **Code Value** record, ensuring it matches an existing linked value in the system.
+  - Inserts the newly created **Service Request** into the database.
+
+---
+
 ## **Code Explanation**
 
 ### **Client Script**
